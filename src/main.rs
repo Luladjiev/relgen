@@ -14,6 +14,11 @@ struct Response {
 pub struct Args {
     #[arg(long, help = "Base branch to use for the Pull Request")]
     base: String,
+    #[arg(
+        long,
+        help = "Prettified name of the base branch to use for the title of the Pull Request"
+    )]
+    base_name: Option<String>,
     #[arg(long, help = "Head branch to use for the Pull Request")]
     head: String,
     #[arg(long, help = "Repositories owner")]
@@ -43,6 +48,7 @@ async fn run(token: String) {
 
     let owner = cli.owner;
     let base = cli.base;
+    let base_name = cli.base_name;
     let head = cli.head;
     let repositories = cli.repo;
     let reviewers = cli.reviewer;
@@ -59,7 +65,9 @@ async fn run(token: String) {
             let mut responses = vec![];
 
             for repo in repos {
-                responses.push(create_pr(&octocrab, &owner, repo, &base, &head, &reviewers));
+                responses.push(create_pr(
+                    &octocrab, &owner, repo, &base, &base_name, &head, &reviewers,
+                ));
             }
 
             let result = join_all(responses).await;
@@ -139,6 +147,7 @@ async fn create_pr(
     owner: &String,
     repo: String,
     base: &String,
+    base_name: &Option<String>,
     head: &String,
     reviewers: &[String],
 ) -> Result<(), String> {
@@ -162,9 +171,14 @@ async fn create_pr(
 
             let date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
+            let name = match base_name {
+                None => base,
+                Some(name) => name,
+            };
+
             let res = octocrab
                 .pulls(owner, &repo)
-                .create(format!("Release to {base} {date}"), head, base)
+                .create(format!("Release to {name} {date}"), head, base)
                 .send()
                 .await;
 
