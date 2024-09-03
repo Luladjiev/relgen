@@ -1,12 +1,22 @@
 # Relgen
 
-`relgen` is an opinionated command-line interface (CLI) tool, designed to simplify the way of creating release Pull Requests used in git-ops workflows.
+`relgen` is an opinionated command-line interface (CLI) tool, designed to simplify the way of creating release Pull
+Requests used in git-ops workflows.
 
 ## Instalation
 
+### Using Cargo
+
+Installing `relgen` through Cargo is the easiest way to get started. You can install it by running the following
+command:
+
+```bash
+cargo install relgen
+```
+
 ### Building from source
 
-You can build `relgen` from source by running the following command:
+You can also build `relgen` from source by running the following command:
 
 ```bash
 cargo install --path .
