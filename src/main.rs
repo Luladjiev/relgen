@@ -182,8 +182,15 @@ async fn create_pr(
                 .await;
 
             match res {
-                Ok(pr) => request_review(octocrab, owner, &repo, reviewers, pr.number).await,
-                Err(e) => generate_error(format!("Failed creating a Pull request in {repo}"), &e),
+                Ok(pr) => {
+                    println!(
+                        "Pull request created in {repo}: https://github.com/{owner}/{repo}/pull/{}",
+                        pr.number
+                    );
+
+                    request_review(octocrab, owner, &repo, reviewers, pr.number).await
+                }
+                Err(e) => generate_error(format!("Failed creating a Pull Request in {repo}"), &e),
             }
         }
         Err(e) => generate_error(format!("Failed to fetch {repo}'s pull requests."), &e),
@@ -204,12 +211,15 @@ async fn request_review(
 
     match res {
         Ok(_res) => {
-            println!("Review requested for {repo}");
+            println!(
+                "Review requested from {} in {repo}'s Pull Request",
+                reviewers.join(", ")
+            );
 
             Ok(())
         }
         Err(e) => generate_error(
-            format!("Failed to request review for {repo}'s Pull request with ID:{pr_id}"),
+            format!("Failed to request review in {repo}'s Pull Request"),
             &e,
         ),
     }
