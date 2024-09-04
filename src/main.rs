@@ -36,22 +36,21 @@ pub struct Args {
 #[tokio::main]
 async fn main() {
     let token = std::env::var("GITHUB_TOKEN");
+    let args = Args::parse();
 
     match token {
-        Ok(token) => run(token).await,
+        Ok(token) => run(token, args).await,
         Err(e) => println!("Failed to retrieve GITHUB_TOKEN: {e}"),
     }
 }
 
-async fn run(token: String) {
-    let cli = Args::parse();
-
-    let owner = cli.owner;
-    let base = cli.base;
-    let base_name = cli.base_name;
-    let head = cli.head;
-    let repositories = cli.repo;
-    let reviewers = cli.reviewer;
+async fn run(token: String, args: Args) {
+    let owner = args.owner;
+    let base = args.base;
+    let base_name = args.base_name;
+    let head = args.head;
+    let repositories = args.repo;
+    let reviewers = args.reviewer;
 
     let octocrab = Octocrab::builder()
         .personal_token(token)
