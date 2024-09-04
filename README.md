@@ -3,7 +3,24 @@
 `relgen` is an opinionated command-line interface (CLI) tool, designed to simplify the way of creating release Pull
 Requests used in git-ops workflows.
 
-## Instalation
+## Usage
+
+```bash
+relgen --owner luladjiev --repo relgen --head main --base prod-branch --base-name Production --reviewer Luladjiev
+```
+
+`--repo` and `--reviewer` can be used multiple times to create Pull Requests in multiple repositories and assign reviews
+to multiple persons
+
+Relgen will not create a Pull Request if `head` branch is not ahead of `base` branch.
+
+To get a comprehensive list of all available commands and options, you can use the `--help` flag:
+
+```bash
+relgen --help
+```
+
+## Installation
 
 ### Using Cargo
 
@@ -20,14 +37,6 @@ You can also build `relgen` from source by running the following command:
 
 ```bash
 cargo install --path .
-```
-
-## Usage
-
-To get a comprehensive list of all available commands and options, you can use the `--help` flag:
-
-```bash
-relgen --help
 ```
 
 ## Development
