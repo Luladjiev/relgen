@@ -1,74 +1,55 @@
+mod data;
+mod models;
+
 use clap::Parser;
+use data::github::GitHub;
 use futures::future::join_all;
-use octocrab::params::State;
-use octocrab::{GitHubError, Octocrab};
-use serde::Deserialize;
-use std::error::Error;
-
-#[derive(Deserialize)]
-struct Response {
-    total_commits: u32,
-}
-
-#[derive(Parser, Debug)]
-pub struct Args {
-    #[arg(long, help = "Base branch to use for the Pull Request")]
-    base: String,
-    #[arg(
-        long,
-        help = "Prettified name of the base branch to use for the title of the Pull Request"
-    )]
-    base_name: Option<String>,
-    #[arg(long, help = "Head branch to use for the Pull Request")]
-    head: String,
-    #[arg(long, help = "Repositories owner")]
-    owner: String,
-    #[arg(
-        long,
-        required = true,
-        help = "List of repositories to create Pull Requests to"
-    )]
-    repo: Vec<String>,
-    #[arg(long, help = "List of reviewers to add to each Pull Request")]
-    reviewer: Vec<String>,
-    #[arg(long, help = "Dry run mode, no Pull Requests will be created")]
-    dry_run: bool,
-}
+use models::args::Args;
+use octocrab::Octocrab;
 
 #[tokio::main]
 async fn main() {
-    let token = std::env::var("GITHUB_TOKEN");
-    let args = Args::parse();
+    let args = match Args::try_parse() {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("Failed to parse arguments: {}", e);
+            return;
+        }
+    };
 
-    match token {
-        Ok(token) => run(token, args).await,
-        Err(e) => println!("Failed to retrieve GITHUB_TOKEN: {e}"),
-    }
-}
-
-async fn run(token: String, args: Args) {
-    let owner = args.owner;
-    let base = args.base;
-    let base_name = args.base_name;
-    let head = args.head;
-    let repositories = args.repo;
-    let reviewers = args.reviewer;
-    let dry_run = args.dry_run;
-
+    let token = match std::env::var("GITHUB_TOKEN") {
+        Ok(token) => token,
+        Err(e) => {
+            println!("Failed to retrieve GITHUB_TOKEN: {e}");
+            return;
+        }
+    };
     let octocrab = Octocrab::builder()
         .personal_token(token)
         .build()
         .expect("Failed to instantiate Octocrab");
 
-    let res = get_repos_with_changes(&octocrab, &owner, &repositories, &base, &head).await;
+    let gh = GitHub {
+        octocrab: &octocrab,
+    };
+
+    let res = gh
+        .get_repos_with_changes(&args.owner, &args.repo, &args.base, &args.head)
+        .await;
 
     match res {
         Ok(repos) => {
             let mut responses = vec![];
 
             for repo in repos {
-                responses.push(create_pr(
-                    &octocrab, &owner, repo, &base, &base_name, &head, &reviewers, dry_run,
+                responses.push(gh.create_pr(
+                    &args.owner,
+                    repo,
+                    &args.base,
+                    &args.base_name,
+                    &args.head,
+                    &args.reviewer,
+                    args.dry_run,
                 ));
             }
 
@@ -80,157 +61,9 @@ async fn run(token: String, args: Args) {
                 }
             }
         }
-        Err(e) => println!("{e}"),
-    }
-}
-
-fn generate_error(message: String, e: &octocrab::Error) -> Result<(), String> {
-    if let Some(s) = e.source() {
-        let err = s
-            .downcast_ref::<GitHubError>()
-            .expect("Failed to extract source error");
-
-        return Err(format!("{message}: {}", err.message));
-    }
-
-    Err(message)
-}
-
-async fn get_repos_with_changes(
-    octocrab: &Octocrab,
-    owner: &String,
-    repositories: &Vec<String>,
-    base: &String,
-    head: &String,
-) -> Result<Vec<String>, String> {
-    let mut responses = vec![];
-
-    for repo in repositories {
-        let res = octocrab.get(
-            format!("/repos/{owner}/{repo}/compare/{base}...{head}"),
-            None::<&()>,
-        );
-
-        responses.push(res);
-    }
-
-    let responses: Vec<octocrab::Result<Response>> = join_all(responses).await;
-    let mut repos_with_changes = vec![];
-
-    for (index, res) in responses.iter().enumerate() {
-        let repo = repositories.get(index).expect("Failed to get repo");
-
-        match res {
-            Ok(res) => {
-                if res.total_commits > 0 {
-                    repos_with_changes.push(repo.clone());
-                } else {
-                    println!("{repo}'s {head} and {base} branches are in sync, skipping.");
-                }
-            }
-            Err(e) => {
-                let err = generate_error(
-                    format!("Error comparing {repo}'s {head} and {base} branches"),
-                    e,
-                );
-
-                if let Err(err) = err {
-                    println!("{err}");
-                }
-            }
+        Err(e) => {
+            eprintln!("App error: {}", e);
+            std::process::exit(1);
         }
-    }
-
-    Ok(repos_with_changes)
-}
-
-async fn create_pr(
-    octocrab: &Octocrab,
-    owner: &String,
-    repo: String,
-    base: &String,
-    base_name: &Option<String>,
-    head: &String,
-    reviewers: &[String],
-    dry_run: bool,
-) -> Result<(), String> {
-    let res = octocrab
-        .pulls(owner, &repo)
-        .list()
-        .state(State::Open)
-        .head(head)
-        .base(base)
-        .send()
-        .await;
-
-    match res {
-        Ok(pr) => {
-            if !pr.items.is_empty() {
-                pr.items.iter().for_each(|item| {
-                    println!("{repo} already has an opened Pull request: https://github.com/{owner}/{repo}/pull/{}", item.number);
-                });
-                return Ok(());
-            }
-
-            println!("Creating Pull request for {repo}...");
-
-            if dry_run {
-                return Ok(());
-            }
-
-            let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-
-            let name = match base_name {
-                None => base,
-                Some(name) => name,
-            };
-
-            let res = octocrab
-                .pulls(owner, &repo)
-                .create(format!("Release to {name} {date}"), head, base)
-                .send()
-                .await;
-
-            match res {
-                Ok(pr) => {
-                    println!(
-                        "Pull request created in {repo}: https://github.com/{owner}/{repo}/pull/{}",
-                        pr.number
-                    );
-
-                    request_review(octocrab, owner, &repo, reviewers, pr.number).await
-                }
-                Err(e) => generate_error(format!("Failed creating a Pull Request in {repo}"), &e),
-            }
-        }
-        Err(e) => generate_error(format!("Failed to fetch {repo}'s pull requests."), &e),
-    }
-}
-
-async fn request_review(
-    octocrab: &Octocrab,
-    owner: &String,
-    repo: &str,
-    reviewers: &[String],
-    pr_id: u64,
-) -> Result<(), String> {
-    let res = octocrab
-        .pulls(owner, repo)
-        .request_reviews(pr_id, reviewers, [])
-        .await;
-
-    match res {
-        Ok(_res) => {
-            println!(
-                "Review requested from {} in {repo}'s Pull Request",
-                reviewers.join(", ")
-            );
-
-            Ok(())
-        }
-        Err(e) => generate_error(
-            format!("Failed to request review in {repo}'s Pull Request"),
-            &e,
-        ),
     }
 }

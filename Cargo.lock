@@ -796,6 +796,7 @@ dependencies = [
  "http",
  "octocrab",
  "serde",
+ "serde_json",
  "tokio",
 ]
 
