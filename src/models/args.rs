@@ -1,6 +1,7 @@
 use clap::Parser;
 
 #[derive(Parser, Debug)]
+#[command(version)]
 pub struct Args {
     #[arg(long, help = "Base branch to use for the Pull Request")]
     pub base: String,

@@ -5,20 +5,28 @@ Requests used in git-ops workflows.
 
 ## Usage
 
+Relgen reads a GitHub token from `GITHUB_TOKEN`. It needs read access to repository contents and read/write access to
+pull requests.
+
 ```bash
-relgen --owner luladjiev --repo relgen --head main --base prod-branch --base-name Production --reviewer Luladjiev
+export GITHUB_TOKEN=<your-token>
+relgen --owner my-org --repo api --repo web --head main --base prod-branch --base-name Production --reviewer alice
 ```
 
 `--repo` and `--reviewer` can be used multiple times to create Pull Requests in multiple repositories and assign reviews
-to multiple persons
+to multiple persons. GitHub doesn't allow requesting a review from the Pull Request's author.
 
 Relgen will not create a Pull Request if `head` branch is not ahead of `base` branch.
+
+Use `--dry-run` to see which repositories would get a Pull Request without creating any.
 
 To get a comprehensive list of all available commands and options, you can use the `--help` flag:
 
 ```bash
 relgen --help
 ```
+
+`relgen --version` prints the installed version.
 
 ## Installation
 
